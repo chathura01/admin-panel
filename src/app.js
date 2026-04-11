@@ -1,17 +1,26 @@
 const express = require('express');
 const authRoutes = require('./routes/authRoutes');
 
-const app = express();
+module.exports = async function initApp() {
+  const app = express();
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+  // Setup AdminJS BEFORE any global body parsers so express-formidable can parse streams
+  const buildAdminRouter = require('./admin');
+  const { admin, adminRouter } = await buildAdminRouter();
+  app.use(admin.options.rootPath, adminRouter);
+  console.log('AdminJS setup completed.');
 
-// Routes
-app.use('/api/auth', authRoutes);
+  // Now apply standard body parsers for rest of API 
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
-// Basic health check route
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Server is running' });
-});
+  // Routes
+  app.use('/api/auth', authRoutes);
 
-module.exports = app;
+  // Basic health check
+  app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', message: 'Server is running' });
+  });
+
+  return app;
+};

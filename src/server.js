@@ -1,6 +1,6 @@
 require('dotenv').config();
-const app = require('./app');
 const sequelize = require('./config/database');
+const initApp = require('./app');
 
 const PORT = process.env.PORT || 3000;
 
@@ -10,11 +10,8 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Database cconnected successfully.');
 
-    // Setup AdminJS
-    const buildAdminRouter = require('./admin');
-    const { admin, adminRouter } = await buildAdminRouter();
-    app.use(admin.options.rootPath, adminRouter);
-    console.log('AdminJS setup completed.');
+    // Initialize application routes asynchronously
+    const app = await initApp();
 
     // Start the server
     app.listen(PORT, () => {
