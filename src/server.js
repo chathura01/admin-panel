@@ -10,6 +10,12 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Database cconnected successfully.');
 
+    // Setup AdminJS
+    const buildAdminRouter = require('./admin');
+    const { admin, adminRouter } = await buildAdminRouter();
+    app.use(admin.options.rootPath, adminRouter);
+    console.log('AdminJS setup completed.');
+
     // Start the server
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
