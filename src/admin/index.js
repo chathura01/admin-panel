@@ -17,43 +17,137 @@ async function buildAdminRouter() {
   const DashboardComponent = componentLoader.add('Dashboard', './components/Dashboard.jsx');
   const SettingsComponent = componentLoader.add('Settings', './components/Settings.jsx');
 
-  // RBAC Roles
-  const canModify = ({ currentAdmin }) => {
-    return currentAdmin && currentAdmin.role === 'admin';
+  // Helper: robust check to guarantee only admins can modify
+  const canModify = (context) => {
+    const role = context?.currentAdmin?.role;
+    // Log for debugging
+    // console.log('[AdminJS canModify check] User role is:', role);
+    return role === 'admin';
+  };
+
+  // Helper: rigorous hook to block execution
+  const strictAccessHook = async (request, context) => {
+    if (context?.currentAdmin?.role !== 'admin') {
+      throw new Error('Forbidden: You do not have permission to execute this action.');
+    }
+    return request;
+  };
+
+  const restrictedAction = {
+    isAccessible: canModify,
+    isVisible: canModify,
+    before: strictAccessHook,
   };
 
   const resources = [
-    db.User,
-    db.Category,
-    db.Product,
-    db.Order,
-    db.OrderItem,
-    db.Setting,
-  ].map((model) => {
-    const options = {
-      actions: {
-        new: { isAccessible: canModify },
-        edit: { isAccessible: canModify },
-        delete: { isAccessible: canModify },
+    // ── Users: admin-only ─────────────────────────────────────────────────────
+    {
+      resource: db.User,
+      options: {
+        properties: { password: { isVisible: false } },
+        actions: {
+          list:   { isAccessible: canModify },
+          show:   { isAccessible: canModify },
+          search: { isAccessible: canModify },
+          new:     restrictedAction,
+          edit:   restrictedAction,
+          delete: restrictedAction,
+          bulkDelete: restrictedAction,
+        },
       },
-    };
+    },
 
-    // Hide password field
-    if (model.name === 'User') {
-      options.properties = {
-        password: { isVisible: false },
-      };
-    }
+    // ── Categories: visible to all, editable by admin only ────────────────────
+    {
+      resource: db.Category,
+      options: {
+        actions: {
+          new:        restrictedAction,
+          edit:       restrictedAction,
+          delete:     restrictedAction,
+          bulkDelete: restrictedAction,
+        },
+      },
+    },
 
-    // Hide User and Setting entirely from regular users
-    if (model.name === 'User' || model.name === 'Setting') {
-      options.actions.list = { isAccessible: canModify };
-      options.actions.show = { isAccessible: canModify };
-      options.actions.search = { isAccessible: canModify };
-    }
+    // ── Products: visible to all, editable by admin only ─────────────────────
+    {
+      resource: db.Product,
+      options: {
+        actions: {
+          new:        restrictedAction,
+          edit:       restrictedAction,
+          delete:     restrictedAction,
+          bulkDelete: restrictedAction,
+        },
+      },
+    },
 
-    return { resource: model, options };
-  });
+    // ── Orders: users see only their own orders ───────────────────────────────
+    {
+      resource: db.Order,
+      options: {
+        actions: {
+          new:        restrictedAction,
+          edit:       restrictedAction,
+          delete:     restrictedAction,
+          bulkDelete: restrictedAction,
+
+          // Before listing, inject a userId filter for regular users
+          list: {
+            before: async (request, context) => {
+              const { currentAdmin } = context;
+              if (currentAdmin && currentAdmin.role !== 'admin') {
+                request.query = request.query || {};
+                request.query['filters.userId'] = currentAdmin.id;
+              }
+              return request;
+            },
+          },
+
+          // Only allow show if the order belongs to the logged-in user (or admin)
+          show: {
+            isAccessible: ({ currentAdmin, record }) => {
+              if (!currentAdmin) return false;
+              if (currentAdmin.role === 'admin') return true;
+              return record && record.params && record.params.userId === currentAdmin.id;
+            },
+          },
+        },
+      },
+    },
+
+    // ── OrderItems: admin-only ────────────────────────────────────────────────
+    {
+      resource: db.OrderItem,
+      options: {
+        actions: {
+          list:   { isAccessible: canModify },
+          show:   { isAccessible: canModify },
+          new:    restrictedAction,
+          edit:   restrictedAction,
+          delete: restrictedAction,
+          bulkDelete: restrictedAction,
+        },
+      },
+    },
+
+    // ── Settings: admin-only ──────────────────────────────────────────────────
+    {
+      resource: db.Setting,
+      options: {
+        actions: {
+          list:   { isAccessible: canModify },
+          show:   { isAccessible: canModify },
+          search: { isAccessible: canModify },
+          new:    restrictedAction,
+          edit:   restrictedAction,
+          delete: restrictedAction,
+          bulkDelete: restrictedAction,
+        },
+      },
+    },
+  ];
 
   const adminOptions = {
     databases: [db.sequelize],
@@ -68,7 +162,6 @@ async function buildAdminRouter() {
           if (request.method === 'post') {
             const updates = request.payload?.settings || [];
             for (const sp of updates) {
-              // Create or update key-value pairs
               await db.Setting.upsert({ key: sp.key, value: sp.value });
             }
             return { settings: updates };
@@ -81,37 +174,62 @@ async function buildAdminRouter() {
     dashboard: {
       component: DashboardComponent,
       handler: async (request, response, context) => {
+        const { currentAdmin } = context;
+
+        // Regular users get profile + their own orders only
+        if (currentAdmin && currentAdmin.role !== 'admin') {
+          const myOrders = await db.Order.findAll({
+            where: { userId: currentAdmin.id },
+            order: [['createdAt', 'DESC']],
+            limit: 10,
+          });
+          return {
+            profile: {
+              name: currentAdmin.name,
+              email: currentAdmin.email,
+              role: currentAdmin.role,
+            },
+            myOrders: myOrders.map(o => ({
+              id: o.id,
+              status: o.status,
+              totalAmount: o.totalAmount,
+              date: new Date(o.createdAt).toLocaleDateString(),
+            })),
+          };
+        }
+
+        // Admins get full analytics
         const usersCount = await db.User.count();
         const ordersCount = await db.Order.count();
         const productsCount = await db.Product.count();
 
         const totalRevenue = await db.Order.sum('totalAmount', {
-          where: { status: ['paid', 'shipped', 'delivered'] }
+          where: { status: ['paid', 'shipped', 'delivered'] },
         }) || 0;
 
         const statuses = ['pending', 'paid', 'shipped', 'delivered', 'cancelled'];
         const statusCounts = {};
         for (const st of statuses) {
-           statusCounts[st] = await db.Order.count({ where: { status: st } });
+          statusCounts[st] = await db.Order.count({ where: { status: st } });
         }
 
         const [recentOrdersRaw] = await db.sequelize.query(`
-          SELECT DATE("createdAt") as date, COUNT(id) as count 
-          FROM "Orders" 
-          GROUP BY DATE("createdAt") 
-          ORDER BY DATE("createdAt") DESC 
+          SELECT DATE("createdAt") as date, COUNT(id) as count
+          FROM "Orders"
+          GROUP BY DATE("createdAt")
+          ORDER BY DATE("createdAt") DESC
           LIMIT 14
         `);
-        
+
         const ordersByDay = recentOrdersRaw.reverse().map(row => ({
-           date: new Date(row.date).toLocaleDateString(),
-           Orders: parseInt(row.count, 10)
+          date: new Date(row.date).toLocaleDateString(),
+          Orders: parseInt(row.count, 10),
         }));
 
-        return { 
-          usersCount, 
-          ordersCount, 
-          productsCount, 
+        return {
+          usersCount,
+          ordersCount,
+          productsCount,
           totalRevenue,
           statusCounts,
           ordersByDay,
