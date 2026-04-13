@@ -3,8 +3,7 @@ const sequelize = require('../config/database');
 
 const Product = sequelize.define('Product', {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    type: DataTypes.STRING(10),
     primaryKey: true,
   },
   name: {
@@ -24,6 +23,14 @@ const Product = sequelize.define('Product', {
   }
 }, {
   timestamps: true,
+  hooks: {
+    beforeValidate: async (product) => {
+      const { generateId } = require('../utils/idGenerator');
+      if (!product.id) {
+        product.id = await generateId(Product, 'P');
+      }
+    }
+  }
 });
 
 module.exports = Product;

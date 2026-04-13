@@ -3,8 +3,7 @@ const sequelize = require('../config/database');
 
 const Category = sequelize.define('Category', {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    type: DataTypes.STRING(10),
     primaryKey: true,
   },
   name: {
@@ -16,6 +15,14 @@ const Category = sequelize.define('Category', {
   }
 }, {
   timestamps: true,
+  hooks: {
+    beforeValidate: async (category) => {
+      const { generateId } = require('../utils/idGenerator');
+      if (!category.id) {
+        category.id = await generateId(Category, 'C');
+      }
+    }
+  }
 });
 
 module.exports = Category;

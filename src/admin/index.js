@@ -16,6 +16,7 @@ async function buildAdminRouter() {
   const componentLoader = new ComponentLoader();
   const DashboardComponent = componentLoader.add('Dashboard', './components/Dashboard.jsx');
   const SettingsComponent = componentLoader.add('Settings', './components/Settings.jsx');
+  const OrderShowComponent = componentLoader.add('OrderShow', './components/OrderShow.jsx');
 
   // Helper: robust check to guarantee only admins can modify
   const canModify = (context) => {
@@ -105,13 +106,52 @@ async function buildAdminRouter() {
             },
           },
 
-          // Only allow show if the order belongs to the logged-in user (or admin)
+          // Show view with detailed items list
           show: {
+            component: OrderShowComponent,
             isAccessible: ({ currentAdmin, record }) => {
               if (!currentAdmin) return false;
               if (currentAdmin.role === 'admin') return true;
               return record && record.params && record.params.userId === currentAdmin.id;
             },
+            handler: async (request, response, context) => {
+              const { record, currentAdmin, resource } = context;
+              
+              // Ensure we have the record (sometimes context.record might be missing in custom handlers)
+              let targetRecord = record;
+              if (!targetRecord && request.params.recordId) {
+                targetRecord = await resource.findOne(request.params.recordId);
+              }
+
+              if (!targetRecord) {
+                console.log(`[OrderShow Handler] No record found for ID: ${request.params.recordId}`);
+                return { record: null, items: [] };
+              }
+
+              const recordData = targetRecord.toJSON(currentAdmin);
+              const orderId = targetRecord.id();
+              
+              // Fetch items
+              const items = await db.OrderItem.findAll({
+                where: { orderId: orderId },
+                include: [{ model: db.Product, as: 'product' }]
+              });
+
+              console.log(`[OrderShow Handler] Order: ${orderId}, Found ${items.length} items.`);
+
+              // Inject items into record.params to guarantee delivery to the component
+              recordData.params.itemsList = items.map(item => ({
+                id: item.id,
+                productName: item.product?.name || 'Unknown Product',
+                quantity: item.quantity,
+                price: item.price,
+                subtotal: (item.quantity * item.price).toFixed(2)
+              }));
+
+              return {
+                record: recordData
+              };
+            }
           },
         },
       },

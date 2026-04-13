@@ -3,8 +3,7 @@ const sequelize = require('../config/database');
 
 const User = sequelize.define('User', {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    type: DataTypes.STRING(10),
     primaryKey: true,
   },
   name: {
@@ -26,6 +25,14 @@ const User = sequelize.define('User', {
   }
 }, {
   timestamps: true,
+  hooks: {
+    beforeValidate: async (user) => {
+      const { generateId } = require('../utils/idGenerator');
+      if (!user.id) {
+        user.id = await generateId(User, 'U');
+      }
+    }
+  }
 });
 
 module.exports = User;
