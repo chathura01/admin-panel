@@ -21,9 +21,12 @@ async function buildAdminRouter() {
   // Helper: robust check to guarantee only admins can modify
   const canModify = (context) => {
     const role = context?.currentAdmin?.role;
-    // Log for debugging
-    // console.log('[AdminJS canModify check] User role is:', role);
     return role === 'admin';
+  };
+
+  // Helper: visibility for timestamps (admin only)
+  const isAdminVisible = (context) => {
+    return context?.currentAdmin?.role === 'admin';
   };
 
   // Helper: rigorous hook to block execution
@@ -39,6 +42,8 @@ async function buildAdminRouter() {
     isVisible: canModify,
     before: strictAccessHook,
   };
+
+
 
   const resources = [
     // ── Users: admin-only ─────────────────────────────────────────────────────
@@ -62,6 +67,10 @@ async function buildAdminRouter() {
     {
       resource: db.Category,
       options: {
+        properties: {
+          createdAt: { isVisible: false }, // STATIC HIDE TEST
+          updatedAt: { isVisible: false },
+        },
         actions: {
           new:        restrictedAction,
           edit:       restrictedAction,
@@ -75,6 +84,10 @@ async function buildAdminRouter() {
     {
       resource: db.Product,
       options: {
+        properties: {
+          createdAt: { isVisible: false },
+          updatedAt: { isVisible: false },
+        },
         actions: {
           new:        restrictedAction,
           edit:       restrictedAction,
@@ -88,14 +101,12 @@ async function buildAdminRouter() {
     {
       resource: db.Order,
       options: {
+        properties: {
+          createdAt: { isVisible: false },
+          updatedAt: { isVisible: false },
+        },
         actions: {
-          new:        restrictedAction,
-          edit:       restrictedAction,
-          delete:     restrictedAction,
-          bulkDelete: restrictedAction,
-
-          // Before listing, inject a userId filter for regular users
-          list: {
+          list: { 
             before: async (request, context) => {
               const { currentAdmin } = context;
               if (currentAdmin && currentAdmin.role !== 'admin') {
@@ -198,6 +209,7 @@ async function buildAdminRouter() {
       Settings: {
         component: SettingsComponent,
         icon: 'SetAsCurrentProject',
+        isAccessible: canModify,
         handler: async (request, response, context) => {
           if (request.method === 'post') {
             const updates = request.payload?.settings || [];
@@ -277,7 +289,7 @@ async function buildAdminRouter() {
       },
     },
     branding: {
-      companyName: 'Admin Dashboard',
+      companyName: 'Admin Dashboard (Secured)',
     },
   };
 
