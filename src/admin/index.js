@@ -18,18 +18,20 @@ async function buildAdminRouter() {
   const SettingsComponent = componentLoader.add('Settings', './components/Settings.jsx');
   const OrderShowComponent = componentLoader.add('OrderShow', './components/OrderShow.jsx');
 
-  // Helper: robust check to guarantee only admins can modify
+  // only admins can modify
   const canModify = (context) => {
     const role = context?.currentAdmin?.role;
     return role === 'admin';
   };
 
-  // Helper: visibility for timestamps (admin only)
-  const isAdminVisible = (context) => {
-    return context?.currentAdmin?.role === 'admin';
-  };
+  const canViewAdminResource = ({ currentAdmin }) => currentAdmin?.role === 'admin';
+  const canViewCustomerResource = ({ currentAdmin }) => !!currentAdmin && currentAdmin.role !== 'admin';
+  const withoutTimestamps = (model) =>
+    Object.keys(model.rawAttributes || {}).filter(
+      (field) => !['createdAt', 'updatedAt'].includes(field)
+    );
 
-  // Helper: rigorous hook to block execution
+  // block execution
   const strictAccessHook = async (request, context) => {
     if (context?.currentAdmin?.role !== 'admin') {
       throw new Error('Forbidden: You do not have permission to execute this action.');
@@ -46,89 +48,113 @@ async function buildAdminRouter() {
 
 
   const resources = [
-    // ── Users: admin-only ─────────────────────────────────────────────────────
+    // admin-only 
     {
       resource: db.User,
       options: {
         properties: { password: { isVisible: false } },
         actions: {
-          list:   { isAccessible: canModify },
-          show:   { isAccessible: canModify },
+          list: { isAccessible: canModify },
+          show: { isAccessible: canModify },
           search: { isAccessible: canModify },
-          new:     restrictedAction,
-          edit:   restrictedAction,
+          new: restrictedAction,
+          edit: restrictedAction,
           delete: restrictedAction,
           bulkDelete: restrictedAction,
         },
       },
     },
 
-    // ── Categories: visible to all, editable by admin only ────────────────────
+    // Categories (admin view)
     {
       resource: db.Category,
       options: {
-        properties: {
-          createdAt: { isVisible: false }, // STATIC HIDE TEST
-          updatedAt: { isVisible: false },
-        },
         actions: {
-          new:        restrictedAction,
-          edit:       restrictedAction,
-          delete:     restrictedAction,
+          list: { isAccessible: canViewAdminResource },
+          show: { isAccessible: canViewAdminResource },
+          search: { isAccessible: canViewAdminResource },
+          new: restrictedAction,
+          edit: restrictedAction,
+          delete: restrictedAction,
           bulkDelete: restrictedAction,
         },
       },
     },
 
-    // ── Products: visible to all, editable by admin only ─────────────────────
+    // Categories (customer view) - hides timestamps 
+    {
+      resource: db.Category,
+      options: {
+        id: 'Category',
+        listProperties: withoutTimestamps(db.Category),
+        actions: {
+          list: { isAccessible: canViewCustomerResource },
+          show: { isAccessible: canViewCustomerResource },
+          search: { isAccessible: canViewCustomerResource },
+          new: { isAccessible: () => false },
+          edit: { isAccessible: () => false },
+          delete: { isAccessible: () => false },
+          bulkDelete: { isAccessible: () => false },
+        },
+      },
+    },
+
+    // Products (admin view)
     {
       resource: db.Product,
       options: {
-        properties: {
-          createdAt: { isVisible: false },
-          updatedAt: { isVisible: false },
-        },
         actions: {
-          new:        restrictedAction,
-          edit:       restrictedAction,
-          delete:     restrictedAction,
+          list: { isAccessible: canViewAdminResource },
+          show: { isAccessible: canViewAdminResource },
+          search: { isAccessible: canViewAdminResource },
+          new: restrictedAction,
+          edit: restrictedAction,
+          delete: restrictedAction,
           bulkDelete: restrictedAction,
         },
       },
     },
 
-    // ── Orders: users see only their own orders ───────────────────────────────
+    // Products (customer view)
+    {
+      resource: db.Product,
+      options: {
+        id: 'Product',
+        listProperties: withoutTimestamps(db.Product),
+        actions: {
+          list: { isAccessible: canViewCustomerResource },
+          show: { isAccessible: canViewCustomerResource },
+          search: { isAccessible: canViewCustomerResource },
+          new: { isAccessible: () => false },
+          edit: { isAccessible: () => false },
+          delete: { isAccessible: () => false },
+          bulkDelete: { isAccessible: () => false },
+        },
+      },
+    },
+
+    // Orders (admin view)
     {
       resource: db.Order,
       options: {
-        properties: {
-          createdAt: { isVisible: false },
-          updatedAt: { isVisible: false },
-        },
         actions: {
-          list: { 
-            before: async (request, context) => {
-              const { currentAdmin } = context;
-              if (currentAdmin && currentAdmin.role !== 'admin') {
-                request.query = request.query || {};
-                request.query['filters.userId'] = currentAdmin.id;
-              }
-              return request;
-            },
-          },
+          list: { isAccessible: canViewAdminResource },
+          search: { isAccessible: canViewAdminResource },
+          new: restrictedAction,
+          edit: restrictedAction,
+          delete: restrictedAction,
+          bulkDelete: restrictedAction,
 
           // Show view with detailed items list
           show: {
             component: OrderShowComponent,
             isAccessible: ({ currentAdmin, record }) => {
               if (!currentAdmin) return false;
-              if (currentAdmin.role === 'admin') return true;
-              return record && record.params && record.params.userId === currentAdmin.id;
+              return currentAdmin.role === 'admin' && !!record;
             },
             handler: async (request, response, context) => {
               const { record, currentAdmin, resource } = context;
-              
-              // Ensure we have the record (sometimes context.record might be missing in custom handlers)
+
               let targetRecord = record;
               if (!targetRecord && request.params.recordId) {
                 targetRecord = await resource.findOne(request.params.recordId);
@@ -141,7 +167,7 @@ async function buildAdminRouter() {
 
               const recordData = targetRecord.toJSON(currentAdmin);
               const orderId = targetRecord.id();
-              
+
               // Fetch items
               const items = await db.OrderItem.findAll({
                 where: { orderId: orderId },
@@ -150,7 +176,7 @@ async function buildAdminRouter() {
 
               console.log(`[OrderShow Handler] Order: ${orderId}, Found ${items.length} items.`);
 
-              // Inject items into record.params to guarantee delivery to the component
+              // Inject items into record.params
               recordData.params.itemsList = items.map(item => ({
                 id: item.id,
                 productName: item.product?.name || 'Unknown Product',
@@ -168,31 +194,100 @@ async function buildAdminRouter() {
       },
     },
 
-    // ── OrderItems: admin-only ────────────────────────────────────────────────
+    // Orders (customer view):
+    {
+      resource: db.Order,
+      options: {
+        id: 'Order',
+        listProperties: withoutTimestamps(db.Order),
+        actions: {
+          list: {
+            isAccessible: canViewCustomerResource,
+            before: async (request, context) => {
+              const { currentAdmin } = context;
+              if (currentAdmin) {
+                request.query = request.query || {};
+                request.query['filters.userId'] = currentAdmin.id;
+              }
+              return request;
+            },
+          },
+          show: {
+            component: OrderShowComponent,
+            isAccessible: ({ currentAdmin, record }) => {
+              if (!currentAdmin || !record) return false;
+              return record.params && record.params.userId === currentAdmin.id;
+            },
+            handler: async (request, response, context) => {
+              const { record, currentAdmin, resource } = context;
+
+              let targetRecord = record;
+              if (!targetRecord && request.params.recordId) {
+                targetRecord = await resource.findOne(request.params.recordId);
+              }
+
+              if (!targetRecord) {
+                console.log(`[OrderShow Handler] No record found for ID: ${request.params.recordId}`);
+                return { record: null, items: [] };
+              }
+
+              const recordData = targetRecord.toJSON(currentAdmin);
+              const orderId = targetRecord.id();
+
+              const items = await db.OrderItem.findAll({
+                where: { orderId: orderId },
+                include: [{ model: db.Product, as: 'product' }]
+              });
+
+              console.log(`[OrderShow Handler] Order: ${orderId}, Found ${items.length} items.`);
+
+              recordData.params.itemsList = items.map(item => ({
+                id: item.id,
+                productName: item.product?.name || 'Unknown Product',
+                quantity: item.quantity,
+                price: item.price,
+                subtotal: (item.quantity * item.price).toFixed(2)
+              }));
+
+              return {
+                record: recordData
+              };
+            }
+          },
+          search: { isAccessible: canViewCustomerResource },
+          new: { isAccessible: () => false },
+          edit: { isAccessible: () => false },
+          delete: { isAccessible: () => false },
+          bulkDelete: { isAccessible: () => false },
+        },
+      },
+    },
+
+    // OrderItems: admin-only
     {
       resource: db.OrderItem,
       options: {
         actions: {
-          list:   { isAccessible: canModify },
-          show:   { isAccessible: canModify },
-          new:    restrictedAction,
-          edit:   restrictedAction,
+          list: { isAccessible: canModify },
+          show: { isAccessible: canModify },
+          new: restrictedAction,
+          edit: restrictedAction,
           delete: restrictedAction,
           bulkDelete: restrictedAction,
         },
       },
     },
 
-    // ── Settings: admin-only ──────────────────────────────────────────────────
+    // Settings: admin-only
     {
       resource: db.Setting,
       options: {
         actions: {
-          list:   { isAccessible: canModify },
-          show:   { isAccessible: canModify },
+          list: { isAccessible: canModify },
+          show: { isAccessible: canModify },
           search: { isAccessible: canModify },
-          new:    restrictedAction,
-          edit:   restrictedAction,
+          new: restrictedAction,
+          edit: restrictedAction,
           delete: restrictedAction,
           bulkDelete: restrictedAction,
         },
@@ -228,7 +323,7 @@ async function buildAdminRouter() {
       handler: async (request, response, context) => {
         const { currentAdmin } = context;
 
-        // Regular users get profile + their own orders only
+        // profile + their own orders - regular users
         if (currentAdmin && currentAdmin.role !== 'admin') {
           const myOrders = await db.Order.findAll({
             where: { userId: currentAdmin.id },
@@ -250,7 +345,7 @@ async function buildAdminRouter() {
           };
         }
 
-        // Admins get full analytics
+        // full analytics - admin
         const usersCount = await db.User.count();
         const ordersCount = await db.Order.count();
         const productsCount = await db.Product.count();
@@ -289,7 +384,7 @@ async function buildAdminRouter() {
       },
     },
     branding: {
-      companyName: 'Admin Dashboard (Secured)',
+      companyName: 'Admin Dashboard',
     },
   };
 

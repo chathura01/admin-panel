@@ -28,9 +28,9 @@ ChartJS.register(
 const api = new ApiClient();
 
 const STATUS_COLORS = {
-  pending:   '#ffc107',
-  paid:      '#28a745',
-  shipped:   '#007bff',
+  pending: '#ffc107',
+  paid: '#28a745',
+  shipped: '#007bff',
   delivered: '#17a2b8',
   cancelled: '#dc3545',
 };
@@ -100,9 +100,9 @@ const Dashboard = () => {
           {/* KPI Cards */}
           <Box flex flexDirection="row" mb="xl" style={{ gap: '16px', flexWrap: 'wrap' }}>
             {[
-              { label: 'Total Revenue',  value: `$${Number(data.totalRevenue || 0).toFixed(2)}`, color: '#28a745' },
-              { label: 'Total Orders',   value: data.ordersCount   || 0, color: '#007bff' },
-              { label: 'Total Users',    value: data.usersCount    || 0, color: '#6f42c1' },
+              { label: 'Total Revenue', value: `$${Number(data.totalRevenue || 0).toFixed(2)}`, color: '#28a745' },
+              { label: 'Total Orders', value: data.ordersCount || 0, color: '#007bff' },
+              { label: 'Total Users', value: data.usersCount || 0, color: '#6f42c1' },
               { label: 'Total Products', value: data.productsCount || 0, color: '#fd7e14' },
             ].map(({ label, value, color }) => (
               <Box key={label} variant="white" padding="xl" flexGrow={1}

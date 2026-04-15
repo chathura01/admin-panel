@@ -3,7 +3,7 @@ import { Box, H3, H5, Text, Table, TableHead, TableRow, TableCell, TableBody, Ba
 
 const OrderShow = (props) => {
   const { record } = props;
-  
+
   // Custom items list injected into record.params by the server handler
   const items = record?.params?.itemsList || [];
 
@@ -11,9 +11,9 @@ const OrderShow = (props) => {
 
   const status = record.params.status;
   const STATUS_COLORS = {
-    pending:   'warning',
-    paid:      'success',
-    shipped:   'primary',
+    pending: 'warning',
+    paid: 'success',
+    shipped: 'primary',
     delivered: 'info',
     cancelled: 'danger',
   };
