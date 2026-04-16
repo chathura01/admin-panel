@@ -26,9 +26,9 @@ async function buildAdminRouter() {
 
   const canViewAdminResource = ({ currentAdmin }) => currentAdmin?.role === 'admin';
   const canViewCustomerResource = ({ currentAdmin }) => !!currentAdmin && currentAdmin.role !== 'admin';
-  const withoutTimestamps = (model) =>
+  const withoutFields = (model, fieldsToHide) =>
     Object.keys(model.rawAttributes || {}).filter(
-      (field) => !['createdAt', 'updatedAt'].includes(field)
+      (field) => !fieldsToHide.includes(field)
     );
 
   // block execution
@@ -81,24 +81,6 @@ async function buildAdminRouter() {
       },
     },
 
-    // Categories (customer view) - hides timestamps 
-    {
-      resource: db.Category,
-      options: {
-        id: 'Category',
-        listProperties: withoutTimestamps(db.Category),
-        actions: {
-          list: { isAccessible: canViewCustomerResource },
-          show: { isAccessible: canViewCustomerResource },
-          search: { isAccessible: canViewCustomerResource },
-          new: { isAccessible: () => false },
-          edit: { isAccessible: () => false },
-          delete: { isAccessible: () => false },
-          bulkDelete: { isAccessible: () => false },
-        },
-      },
-    },
-
     // Products (admin view)
     {
       resource: db.Product,
@@ -111,24 +93,6 @@ async function buildAdminRouter() {
           edit: restrictedAction,
           delete: restrictedAction,
           bulkDelete: restrictedAction,
-        },
-      },
-    },
-
-    // Products (customer view)
-    {
-      resource: db.Product,
-      options: {
-        id: 'Product',
-        listProperties: withoutTimestamps(db.Product),
-        actions: {
-          list: { isAccessible: canViewCustomerResource },
-          show: { isAccessible: canViewCustomerResource },
-          search: { isAccessible: canViewCustomerResource },
-          new: { isAccessible: () => false },
-          edit: { isAccessible: () => false },
-          delete: { isAccessible: () => false },
-          bulkDelete: { isAccessible: () => false },
         },
       },
     },
@@ -190,75 +154,6 @@ async function buildAdminRouter() {
               };
             }
           },
-        },
-      },
-    },
-
-    // Orders (customer view):
-    {
-      resource: db.Order,
-      options: {
-        id: 'Order',
-        listProperties: withoutTimestamps(db.Order),
-        actions: {
-          list: {
-            isAccessible: canViewCustomerResource,
-            before: async (request, context) => {
-              const { currentAdmin } = context;
-              if (currentAdmin) {
-                request.query = request.query || {};
-                request.query['filters.userId'] = currentAdmin.id;
-              }
-              return request;
-            },
-          },
-          show: {
-            component: OrderShowComponent,
-            isAccessible: ({ currentAdmin, record }) => {
-              if (!currentAdmin || !record) return false;
-              return record.params && record.params.userId === currentAdmin.id;
-            },
-            handler: async (request, response, context) => {
-              const { record, currentAdmin, resource } = context;
-
-              let targetRecord = record;
-              if (!targetRecord && request.params.recordId) {
-                targetRecord = await resource.findOne(request.params.recordId);
-              }
-
-              if (!targetRecord) {
-                console.log(`[OrderShow Handler] No record found for ID: ${request.params.recordId}`);
-                return { record: null, items: [] };
-              }
-
-              const recordData = targetRecord.toJSON(currentAdmin);
-              const orderId = targetRecord.id();
-
-              const items = await db.OrderItem.findAll({
-                where: { orderId: orderId },
-                include: [{ model: db.Product, as: 'product' }]
-              });
-
-              console.log(`[OrderShow Handler] Order: ${orderId}, Found ${items.length} items.`);
-
-              recordData.params.itemsList = items.map(item => ({
-                id: item.id,
-                productName: item.product?.name || 'Unknown Product',
-                quantity: item.quantity,
-                price: item.price,
-                subtotal: (item.quantity * item.price).toFixed(2)
-              }));
-
-              return {
-                record: recordData
-              };
-            }
-          },
-          search: { isAccessible: canViewCustomerResource },
-          new: { isAccessible: () => false },
-          edit: { isAccessible: () => false },
-          delete: { isAccessible: () => false },
-          bulkDelete: { isAccessible: () => false },
         },
       },
     },
