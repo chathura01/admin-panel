@@ -177,6 +177,7 @@ async function buildAdminRouter() {
     {
       resource: db.Setting,
       options: {
+        navigation: false,
         actions: {
           list: { isAccessible: canModify },
           show: { isAccessible: canModify },
@@ -196,20 +197,34 @@ async function buildAdminRouter() {
     resources,
     componentLoader,
     pages: {
-      Settings: {
+      Admin_Shop_Settings: {
+        label: 'Shop Settings',
         component: SettingsComponent,
         icon: 'SetAsCurrentProject',
-        isAccessible: canModify,
+        isVisible: ({ currentAdmin }) => currentAdmin?.role === 'admin',
+        isAccessible: ({ currentAdmin }) => currentAdmin?.role === 'admin',
         handler: async (request, response, context) => {
+          const defaultKeys = ['shopName', 'supportEmail'];
+
           if (request.method === 'post') {
-            const updates = request.payload?.settings || [];
-            for (const sp of updates) {
-              await db.Setting.upsert({ key: sp.key, value: sp.value });
+            const updates = request.payload?.settings || {};
+            for (const key of Object.keys(updates)) {
+              await db.Setting.upsert({ key, value: String(updates[key]) });
             }
             return { settings: updates };
           }
-          const data = await db.Setting.findAll();
-          return { settings: data };
+
+          const settingsRaw = await db.Setting.findAll({
+            where: { key: defaultKeys }
+          });
+          
+          const settings = {};
+          defaultKeys.forEach(k => {
+            const found = settingsRaw.find(s => s.key === k);
+            settings[k] = found ? found.value : '';
+          });
+
+          return { settings };
         },
       },
     },
@@ -217,6 +232,16 @@ async function buildAdminRouter() {
       component: DashboardComponent,
       handler: async (request, response, context) => {
         const { currentAdmin } = context;
+
+        // Fetch store settings for both admin and customer views
+        const settingsRaw = await db.Setting.findAll({
+          where: { key: ['shopName', 'supportEmail'] }
+        });
+        const settings = {};
+        ['shopName', 'supportEmail'].forEach(k => {
+          const found = settingsRaw.find(s => s.key === k);
+          settings[k] = found ? found.value : (k === 'shopName' ? 'Admin Dashboard' : '');
+        });
 
         // profile + their own orders - regular users
         if (currentAdmin && currentAdmin.role !== 'admin') {
@@ -226,6 +251,8 @@ async function buildAdminRouter() {
             limit: 10,
           });
           return {
+            shopName: settings.shopName,
+            supportEmail: settings.supportEmail,
             profile: {
               name: currentAdmin.name,
               email: currentAdmin.email,
@@ -269,6 +296,8 @@ async function buildAdminRouter() {
         }));
 
         return {
+          shopName: settings.shopName,
+          supportEmail: settings.supportEmail,
           usersCount,
           ordersCount,
           productsCount,
