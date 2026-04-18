@@ -1,6 +1,5 @@
 {
   "scripts": {
-    "build": "node src/buildBundle.js",
     "start": "node src/server.js"
   },
   "engines": {

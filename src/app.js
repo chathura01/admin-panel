@@ -7,6 +7,11 @@ module.exports = async function initApp() {
   // Setup AdminJS BEFORE any global body parsers so express-formidable can parse streams
   const buildAdminRouter = require('./admin');
   const { admin, adminRouter } = await buildAdminRouter();
+
+  // Force AdminJS to compile React components (Dashboard, Settings, OrderShow)
+  await admin.initialize();
+  console.log('AdminJS React bundle compiled successfully.');
+
   app.use(admin.options.rootPath, adminRouter);
   console.log('AdminJS setup completed.');
 
