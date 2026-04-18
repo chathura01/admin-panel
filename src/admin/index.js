@@ -1,3 +1,4 @@
+const path = require('path');
 const db = require('../models');
 const bcrypt = require('bcrypt');
 
@@ -14,9 +15,9 @@ async function buildAdminRouter() {
   // Setup Dashboard and Page Components
   const { ComponentLoader } = await import('adminjs');
   const componentLoader = new ComponentLoader();
-  const DashboardComponent = componentLoader.add('Dashboard', './components/Dashboard.jsx');
-  const SettingsComponent = componentLoader.add('Settings', './components/Settings.jsx');
-  const OrderShowComponent = componentLoader.add('OrderShow', './components/OrderShow.jsx');
+  const DashboardComponent = componentLoader.add('Dashboard', path.join(__dirname, 'components', 'Dashboard.jsx'));
+  const SettingsComponent = componentLoader.add('Settings', path.join(__dirname, 'components', 'Settings.jsx'));
+  const OrderShowComponent = componentLoader.add('OrderShow', path.join(__dirname, 'components', 'OrderShow.jsx'));
 
   // only admins can modify
   const canModify = (context) => {
