@@ -315,12 +315,25 @@ async function buildAdminRouter() {
 
   const admin = new AdminJS(adminOptions);
 
-  // Force-compile React components (Dashboard, Settings, OrderShow) regardless of NODE_ENV.
-  // AdminJS skips bundling when NODE_ENV=production (Railway's default).
-  // Using @adminjs/bundler directly guarantees compilation in ALL environments.
-  const { bundle } = await import('@adminjs/bundler');
-  await bundle({ componentLoader, destinationDir: '.adminjs' });
-  console.log('[AdminJS] React components force-bundled successfully.');
+  // Force AdminJS to compile custom React components into .adminjs/bundle.js
+  await admin.initialize();
+
+  // Diagnostic: log whether the bundle was actually created
+  const fs = require('fs');
+  const bundlePath = path.join(process.cwd(), '.adminjs', 'bundle.js');
+  if (fs.existsSync(bundlePath)) {
+    const stats = fs.statSync(bundlePath);
+    console.log(`[AdminJS] bundle.js created successfully (${stats.size} bytes) at ${bundlePath}`);
+  } else {
+    console.error(`[AdminJS] WARNING: bundle.js NOT FOUND at ${bundlePath}`);
+    // List what IS in .adminjs
+    const adminjsDir = path.join(process.cwd(), '.adminjs');
+    if (fs.existsSync(adminjsDir)) {
+      console.error('[AdminJS] Contents of .adminjs:', fs.readdirSync(adminjsDir));
+    } else {
+      console.error('[AdminJS] .adminjs directory does not exist!');
+    }
+  }
 
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(admin, {
     authenticate: async (email, password) => {
