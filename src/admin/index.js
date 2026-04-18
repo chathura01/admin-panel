@@ -315,6 +315,13 @@ async function buildAdminRouter() {
 
   const admin = new AdminJS(adminOptions);
 
+  // Force-compile React components (Dashboard, Settings, OrderShow) regardless of NODE_ENV.
+  // AdminJS skips bundling when NODE_ENV=production (Railway's default).
+  // Using @adminjs/bundler directly guarantees compilation in ALL environments.
+  const { bundle } = await import('@adminjs/bundler');
+  await bundle({ componentLoader, destinationDir: '.adminjs' });
+  console.log('[AdminJS] React components force-bundled successfully.');
+
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(admin, {
     authenticate: async (email, password) => {
       console.log(`[AdminJS] Login attempt for email: ${String(email)}`);
