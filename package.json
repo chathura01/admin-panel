@@ -1,4 +1,10 @@
 {
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@adminjs/bundler": "^3.0.0",
     "@adminjs/express": "^6.1.1",
