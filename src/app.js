@@ -10,14 +10,13 @@ module.exports = async function initApp() {
   app.use(admin.options.rootPath, adminRouter);
   console.log('AdminJS setup completed.');
 
-  // Now apply standard body parsers for rest of API 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
   // Routes
   app.use('/api/auth', authRoutes);
 
-  // Settings custom API (Bypassing AdminJS handler constraints)
+  // Settings custom API
   app.get('/api/settings', async (req, res) => {
     const db = require('./models');
     const settingsRaw = await db.Setting.findAll({ where: { key: ['shopName', 'supportEmail'] } });
@@ -25,7 +24,7 @@ module.exports = async function initApp() {
     settingsRaw.forEach(s => settings[s.key] = s.value);
     res.json(settings);
   });
-  
+
   app.post('/api/settings', async (req, res) => {
     const db = require('./models');
     const { shopName, supportEmail } = req.body;

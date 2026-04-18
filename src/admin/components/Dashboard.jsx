@@ -47,7 +47,6 @@ const Dashboard = () => {
 
   const isAdmin = currentAdmin && currentAdmin.role === 'admin';
 
-  // Strict CSS Injection to hide Admin_Shop_Settings from the sidebar for non-admins
   useEffect(() => {
     if (currentAdmin && !isAdmin) {
       const style = document.createElement('style');
@@ -60,7 +59,7 @@ const Dashboard = () => {
   }, [currentAdmin, isAdmin]);
 
 
-  /* ── Admin analytics data ── */
+  // Admin analytics data 
   const ordersByDay = data.ordersByDay || [];
   const statusCounts = data.statusCounts || {};
   const statusLabels = Object.keys(statusCounts);
@@ -96,7 +95,7 @@ const Dashboard = () => {
     scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
   };
 
-  /* ── Regular user data ── */
+  // Regular user data 
   const profile = data.profile || {};
   const myOrders = data.myOrders || [];
 
