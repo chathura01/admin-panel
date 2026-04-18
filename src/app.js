@@ -10,12 +10,28 @@ module.exports = async function initApp() {
   app.use(admin.options.rootPath, adminRouter);
   console.log('AdminJS setup completed.');
 
-  // Now apply standard body parsers for rest of API 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
   // Routes
   app.use('/api/auth', authRoutes);
+
+  // Settings custom API
+  app.get('/api/settings', async (req, res) => {
+    const db = require('./models');
+    const settingsRaw = await db.Setting.findAll({ where: { key: ['shopName', 'supportEmail'] } });
+    const settings = { shopName: 'Admin Dashboard', supportEmail: 'support@example.com' };
+    settingsRaw.forEach(s => settings[s.key] = s.value);
+    res.json(settings);
+  });
+
+  app.post('/api/settings', async (req, res) => {
+    const db = require('./models');
+    const { shopName, supportEmail } = req.body;
+    if (shopName) await db.Setting.upsert({ key: 'shopName', value: String(shopName) });
+    if (supportEmail) await db.Setting.upsert({ key: 'supportEmail', value: String(supportEmail) });
+    res.json({ success: true });
+  });
 
   // Basic health check
   app.get('/health', (req, res) => {

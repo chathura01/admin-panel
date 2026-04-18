@@ -1,31 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { Box, H3, Text, Button, Input, Label, FormGroup, NoticeBox } from '@adminjs/design-system';
-import { ApiClient } from 'adminjs';
+import { Box, H3, Text, Button, Input, Label, FormGroup, MessageBox } from '@adminjs/design-system';
+import { ApiClient, useCurrentAdmin } from 'adminjs';
 
 const api = new ApiClient();
 
 const Settings = () => {
-  const [settings, setSettings] = useState([]);
+  const [currentAdmin] = useCurrentAdmin();
+  const [settings, setSettings] = useState({ shopName: '', supportEmail: '' });
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
-    // Fetch settings from our custom page handler
-    api.getPage('Settings').then((response) => {
-      if (response.data && response.data.settings) {
-        setSettings(response.data.settings);
-      }
-    });
-  }, []);
+    // Only fetch if admin
+    if (currentAdmin && currentAdmin.role === 'admin') {
+      fetch('/api/settings')
+        .then(res => res.json())
+        .then((data) => {
+          setSettings(data);
+        });
+    }
+  }, [currentAdmin]);
 
-  const handleUpdate = (index, value) => {
-    const newSettings = [...settings];
-    newSettings[index].value = value;
-    setSettings(newSettings);
+  const handleUpdate = (key, value) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSave = () => {
-    api.getPage('Settings', { method: 'post', data: { settings } })
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    })
       .then((res) => {
+        if (!res.ok) throw new Error('Failed');
         setMessage({ type: 'success', text: 'Settings updated successfully!' });
         setTimeout(() => setMessage(null), 3000);
       })
@@ -35,28 +41,47 @@ const Settings = () => {
       });
   };
 
+  // Safety fallback: if somehow a regular user gets here, show nothing or an error
+  if (currentAdmin && currentAdmin.role !== 'admin') {
+    return (
+      <Box variant="white" padding="xl">
+        <MessageBox variant="danger">
+          Access Denied. You do not have permission to view this page.
+        </MessageBox>
+      </Box>
+    );
+  }
+
   return (
-    <Box variant="white" padding="xl">
-      <H3>General Settings</H3>
-      <Text mb="xl">Manage the application's global key-value configuration below.</Text>
+    <Box variant="white" padding="xl" style={{ borderRadius: '8px', maxWidth: '600px', margin: '20px auto' }}>
+      <H3 mb="lg">Store Configuration</H3>
+      <Text mb="xl" color="grey60">Manage your shop's identity and contact information.</Text>
 
       {message && (
-        <NoticeBox mb="xl" type={message.type}>
+        <MessageBox mb="xl" variant={message.type}>
           {message.text}
-        </NoticeBox>
+        </MessageBox>
       )}
 
-      {settings.map((setting, index) => (
-        <FormGroup key={setting.key}>
-          <Label>{setting.key}</Label>
-          <Input
-            value={setting.value || ''}
-            onChange={(e) => handleUpdate(index, e.target.value)}
-          />
-        </FormGroup>
-      ))}
+      <FormGroup>
+        <Label>Shop Name</Label>
+        <Input
+          value={settings.shopName || ''}
+          onChange={(e) => handleUpdate('shopName', e.target.value)}
+          placeholder="e.g. My Amazing Store"
+        />
+      </FormGroup>
 
-      <Button variant="primary" onClick={handleSave} mt="xl">
+      <FormGroup mt="xl">
+        <Label>Support Email</Label>
+        <Input
+          value={settings.supportEmail || ''}
+          onChange={(e) => handleUpdate('supportEmail', e.target.value)}
+          placeholder="e.g. support@mystore.com"
+        />
+      </FormGroup>
+
+      <Button variant="primary" onClick={handleSave} mt="xxl" style={{ width: '100%' }}>
         Save Settings
       </Button>
     </Box>

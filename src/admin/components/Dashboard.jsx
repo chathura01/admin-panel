@@ -47,7 +47,19 @@ const Dashboard = () => {
 
   const isAdmin = currentAdmin && currentAdmin.role === 'admin';
 
-  /* ── Admin analytics data ── */
+  useEffect(() => {
+    if (currentAdmin && !isAdmin) {
+      const style = document.createElement('style');
+      style.innerHTML = `
+        li:has(a[href="/admin/pages/Admin_Shop_Settings"]) { display: none !important; }
+        a[href="/admin/pages/Admin_Shop_Settings"] { display: none !important; }
+      `;
+      document.head.appendChild(style);
+    }
+  }, [currentAdmin, isAdmin]);
+
+
+  // Admin analytics data 
   const ordersByDay = data.ordersByDay || [];
   const statusCounts = data.statusCounts || {};
   const statusLabels = Object.keys(statusCounts);
@@ -83,16 +95,24 @@ const Dashboard = () => {
     scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
   };
 
-  /* ── Regular user data ── */
+  // Regular user data 
   const profile = data.profile || {};
   const myOrders = data.myOrders || [];
 
   return (
     <Box variant="grey" style={{ padding: '20px' }}>
       {/* Header */}
-      <Box variant="white" padding="xl" mb="xl" style={{ borderRadius: '8px' }}>
-        <H2>Welcome, {currentAdmin?.name || 'User'}!</H2>
-        <Text>{isAdmin ? 'Live overview of your store analytics.' : 'Here is your personal dashboard.'}</Text>
+      <Box variant="white" padding="xl" mb="xl" style={{ borderRadius: '8px', borderBottom: '4px solid #007bff' }}>
+        <H2 style={{ color: '#007bff' }}>{data.shopName || 'Admin Dashboard'}</H2>
+        <H5 mt="sm">Welcome back, {currentAdmin?.name || 'User'}!</H5>
+        <Text mt="md" color="grey60">
+          {isAdmin ? 'Live overview of your store analytics.' : 'Here is your personal dashboard and order history.'}
+        </Text>
+        {data.supportEmail && !isAdmin && (
+          <Text mt="lg" style={{ fontSize: '0.9rem', color: '#6c757d' }}>
+            Need help? Contact support at: <strong>{data.supportEmail}</strong>
+          </Text>
+        )}
       </Box>
 
       {isAdmin ? (
