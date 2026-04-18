@@ -5,8 +5,16 @@ module.exports = async function initApp() {
   const app = express();
 
   // Setup AdminJS BEFORE any global body parsers so express-formidable can parse streams
+  // Force AdminJS into dev mode during setup so it bundles AND serves .adminjs/bundle.js
+  // (In production mode, AdminJS skips serving the custom component bundle entirely)
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'development';
+
   const buildAdminRouter = require('./admin');
   const { admin, adminRouter } = await buildAdminRouter();
+
+  // Restore original NODE_ENV for the rest of the application
+  process.env.NODE_ENV = originalNodeEnv;
 
   app.use(admin.options.rootPath, adminRouter);
   console.log('AdminJS setup completed.');
